@@ -1,12 +1,8 @@
 /*
-  EEPROM.h -ported by Paolo Becchi to Esp32 from esp8266 EEPROM
-           -Modified by Elochukwu Ifediora <ifedioraelochukwuc@gmail.com>
-           -Converted to nvs lbernstone@gmail.com
-
-  Uses a nvs byte array to emulate EEPROM
-
-  Copyright (c) 2014 Ivan Grokhotkov. All rights reserved.
-  This file is part of the esp8266 core for Arduino environment.
+  EEPROM.h - EEPROM library
+  Original Copyright (c) 2006 David A. Mellis.  All right reserved.
+  New version by Christopher Andrews 2015.
+  This copy has minor modificatons for use with Teensy, by Paul Stoffregen
 
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
@@ -25,98 +21,147 @@
 
 #ifndef EEPROM_h
 #define EEPROM_h
-#ifndef EEPROM_FLASH_PARTITION_NAME
-#define EEPROM_FLASH_PARTITION_NAME "eeprom"
+
+#include <inttypes.h>
+#include <avr/eeprom.h>
+#include <avr/io.h>
+
+#if defined(__has_include) && __has_include(<type_traits>)
+#include <type_traits>
 #endif
-#include <Arduino.h>
 
-typedef uint32_t nvs_handle;
 
-class EEPROMClass {
-  public:
-    EEPROMClass(uint32_t sector);
-    EEPROMClass(const char* name, uint32_t user_defined_size);
-    EEPROMClass(void);
-    ~EEPROMClass(void);
+/***
+    EERef class.
 
-    bool begin(size_t size);
-    uint8_t read(int address);
-    void write(int address, uint8_t val);
-    uint16_t length();
-    bool commit();
-    void end();
+    This object references an EEPROM cell.
+    Its purpose is to mimic a typical byte of RAM, however its storage is the EEPROM.
+    This class has an overhead of two bytes, similar to storing a pointer to an EEPROM cell.
+***/
 
-    uint8_t * getDataPtr();
-    uint16_t convert(bool clear, const char* EEPROMname = "eeprom", const char* nvsname = "eeprom");
+struct EERef{
 
-    template<typename T>
-    T &get(int address, T &t) {
-      if (address < 0 || address + sizeof(T) > _size)
-        return t;
+    EERef( const int index )
+        : index( index )                 {}
 
-      memcpy((uint8_t*) &t, _data + address, sizeof(T));
-      return t;
+    //Access/read members.
+    uint8_t operator*() const            { return eeprom_read_byte( (uint8_t*) index ); }
+    operator const uint8_t() const       { return **this; }
+
+    //Assignment/write members.
+    EERef &operator=( const EERef &ref ) { return *this = *ref; }
+    EERef &operator=( uint8_t in )       { return eeprom_write_byte( (uint8_t*) index, in ), *this;  }
+    EERef &operator +=( uint8_t in )     { return *this = **this + in; }
+    EERef &operator -=( uint8_t in )     { return *this = **this - in; }
+    EERef &operator *=( uint8_t in )     { return *this = **this * in; }
+    EERef &operator /=( uint8_t in )     { return *this = **this / in; }
+    EERef &operator ^=( uint8_t in )     { return *this = **this ^ in; }
+    EERef &operator %=( uint8_t in )     { return *this = **this % in; }
+    EERef &operator &=( uint8_t in )     { return *this = **this & in; }
+    EERef &operator |=( uint8_t in )     { return *this = **this | in; }
+    EERef &operator <<=( uint8_t in )    { return *this = **this << in; }
+    EERef &operator >>=( uint8_t in )    { return *this = **this >> in; }
+
+    EERef &update( uint8_t in )          { return  in != *this ? *this = in : *this; }
+
+    /** Prefix increment/decrement **/
+    EERef& operator++()                  { return *this += 1; }
+    EERef& operator--()                  { return *this -= 1; }
+
+    /** Postfix increment/decrement **/
+    uint8_t operator++ (int) {
+        uint8_t ret = **this;
+        return ++(*this), ret;
     }
 
-    template<typename T>
-    const T &put(int address, const T &t) {
-      if (address < 0 || address + sizeof(T) > _size)
-        return t;
-
-      memcpy(_data + address, (const uint8_t*) &t, sizeof(T));
-      _dirty = true;
-      return t;
+    uint8_t operator-- (int) {
+        uint8_t ret = **this;
+        return --(*this), ret;
     }
 
-    uint8_t readByte(int address);
-    int8_t readChar(int address);
-    uint8_t readUChar(int address);
-    int16_t readShort(int address);
-    uint16_t readUShort(int address);
-    int32_t readInt(int address);
-    uint32_t readUInt(int address);
-    int32_t readLong(int address);
-    uint32_t readULong(int address);
-    int64_t readLong64(int address);
-    uint64_t readULong64(int address);
-    float_t readFloat(int address);
-    double_t readDouble(int address);
-    bool readBool(int address);
-    size_t readString(int address, char* value, size_t maxLen);
-    String readString(int address);
-    size_t readBytes(int address, void * value, size_t maxLen);
-    template <class T> T readAll (int address, T &);
-
-    size_t writeByte(int address, uint8_t value);
-    size_t writeChar(int address, int8_t value);
-    size_t writeUChar(int address, uint8_t value);
-    size_t writeShort(int address, int16_t value);
-    size_t writeUShort(int address, uint16_t value);
-    size_t writeInt(int address, int32_t value);
-    size_t writeUInt(int address, uint32_t value);
-    size_t writeLong(int address, int32_t value);
-    size_t writeULong(int address, uint32_t value);
-    size_t writeLong64(int address, int64_t value);
-    size_t writeULong64(int address, uint64_t value);
-    size_t writeFloat(int address, float_t value);
-    size_t writeDouble(int address, double_t value);
-    size_t writeBool(int address, bool value);
-    size_t writeString(int address, const char* value);
-    size_t writeString(int address, String value);
-    size_t writeBytes(int address, const void* value, size_t len);
-    template <class T> T writeAll (int address, const T &);
-
-  protected:
-    nvs_handle _handle;
-    uint8_t* _data;
-    size_t _size;
-    bool _dirty;
-    const char* _name;
-    uint32_t _user_defined_size;
+    int index; //Index of current EEPROM cell.
 };
 
-#if !defined(NO_GLOBAL_INSTANCES) && !defined(NO_GLOBAL_EEPROM)
-extern EEPROMClass EEPROM;
+/***
+    EEPtr class.
+
+    This object is a bidirectional pointer to EEPROM cells represented by EERef objects.
+    Just like a normal pointer type, this can be dereferenced and repositioned using
+    increment/decrement operators.
+***/
+
+struct EEPtr{
+
+    EEPtr( const int index )
+        : index( index )                {}
+
+    operator const int() const          { return index; }
+    EEPtr &operator=( int in )          { return index = in, *this; }
+
+    //Iterator functionality.
+    bool operator!=( const EEPtr &ptr ) { return index != ptr.index; }
+    EERef operator*()                   { return index; }
+
+    /** Prefix & Postfix increment/decrement **/
+    EEPtr& operator++()                 { return ++index, *this; }
+    EEPtr& operator--()                 { return --index, *this; }
+    EEPtr operator++ (int)              { return index++; }
+    EEPtr operator-- (int)              { return index--; }
+
+    int index; //Index of current EEPROM cell.
+};
+
+/***
+    EEPROMClass class.
+
+    This object represents the entire EEPROM space.
+    It wraps the functionality of EEPtr and EERef into a basic interface.
+    This class is also 100% backwards compatible with earlier Arduino core releases.
+***/
+
+struct EEPROMClass{
+
+#if defined(__arm__) && defined(TEENSYDUINO)
+    EEPROMClass()                        { eeprom_initialize(); }
 #endif
 
+    //Basic user access methods.
+    EERef operator[]( const int idx )    { return idx; }
+    uint8_t read( int idx )              { return EERef( idx ); }
+    void write( int idx, uint8_t val )   { (EERef( idx )) = val; }
+    void update( int idx, uint8_t val )  { EERef( idx ).update( val ); }
+
+    //STL and C++11 iteration capability.
+    EEPtr begin()                        { return 0x00; }
+    EEPtr end()                          { return length(); } //Standards requires this to be the item after the last valid entry. The returned pointer is invalid.
+    uint16_t length()                    { return E2END + 1; }
+
+    //Functionality to 'get' and 'put' objects to and from EEPROM.
+    template< typename T > T &get( int idx, T &t ){
+        #if defined(__has_include) && __has_include(<type_traits>)
+        static_assert(std::is_trivially_copyable<T>::value,"You can not use this type with EEPROM.get" ); // the code below only makes sense if you can "memcpy" T
+        #endif
+        EEPtr e = idx;
+        uint8_t *ptr = (uint8_t*) &t;
+        for( int count = sizeof(T) ; count ; --count, ++e )  *ptr++ = *e;
+        return t;
+    }
+
+    template< typename T > const T &put( int idx, const T &t ){
+        #if defined(__has_include) && __has_include(<type_traits>)
+        static_assert(std::is_trivially_copyable<T>::value, "You can not use this type with EEPROM.get"); // the code below only makes sense if you can "memcpy" T
+        #endif
+        const uint8_t *ptr = (const uint8_t*) &t;
+#ifdef __arm__
+        eeprom_write_block(ptr, (void *)idx, sizeof(T));
+#else
+        EEPtr e = idx;
+        for( int count = sizeof(T) ; count ; --count, ++e )  (*e).update( *ptr++ );
+#endif
+        return t;
+    }
+};
+
+
+static EEPROMClass EEPROM __attribute__ ((unused));
 #endif
