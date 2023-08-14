@@ -63,7 +63,7 @@ void loop()
     voltage = analogRead(PH_PIN) / ESPADC * ESPVOLTAGE; // Ausgabe der Spannung
     phValue = ph.readPH(voltage, temperature); // Berechnung des pH-Werts anhand 
     //der Spannung mit Temperaturkompensation (insofern möglich)
-    Blynk.virtualWrite(V4, phValue);
+    Blynk.virtualWrite(V1, phValue);
 
     Serial.print("Spannung: ");
     Serial.print(voltage, 2);
